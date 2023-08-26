@@ -3,43 +3,9 @@ import copy
 from datetime import datetime
 from enum import Enum
 
-program = """
-;; in gloom everything is a statement, and every statement has effects except for the (nothing) statement
-- (nothing)
-(nothing happened at all)
 
-;; initialize x
-- (x::initialize) 
-x : (nothing) 
+from types import MethodType as register_method
 
-;; reference x
-- (x) ;; syntactic sugar for (x::view)
-x 
-    popularity: 1
-    value (nothing)
-    lastviewed today at 9:33pm
-    recent messages for x
-    - print (from thread::main)
-    - initialize (from thread::main)
-
-- (x::lastviewed)
-              : popularity: 0.5
-              : value 9:34pm
-              : lastviewed today at 9:34pm
-              : recent messages for x
-                - lastviewed
-- (x 2)
-
-
-- ("hello world".value::print) 
-
-
-;; assignment is expressed with (object.property value), for example
-(x.count 5)
-
-(x 2)
-(x.value 2)
-"""
 
 def ref(func):
     def wrapper(*args, **kwargs):
@@ -125,22 +91,12 @@ def default_receiver(self, sender, method_name, *args, **kwargs):
     return identity(*args, **kwargs)
 
 
-class GloomMessage:
-
-    def __init__(self, sender, recipient, selector, arguments):
-        self.sender = sender
-        self.recipient = recipient
-        self.selector = selector
-        self.arguments = arguments
-
-
 class GloomObject:
 
     objects = {}
 
     def __new__(cls,  *args, **kwargs):
         location = kwargs.get('location')
-        print(f"Got location: {location}")
 
         if (o := cls.objects.get(location)):
             return o
@@ -158,6 +114,8 @@ class GloomObject:
         self.last_referenced = datetime.now()
         self._location = location
         self.objects[self._location] = self
+        self.inbox = []
+        self.outbox = []
 
 
 
@@ -197,7 +155,7 @@ class GloomObject:
     def __repr__(self):
         return f"""
         gloom object @ {self.location}: {self.value}
-            - popularity: {self.popularity_score} (across {len(self.objects)} total objects)
+            - popularity: {self.popularity_score} (across {self.objects_count} total objects)
             - references: {self.references} (out of {self.global_references} total references globally)
             - created at: {self.created_at}
             - last referenced: {self.last_referenced}
@@ -225,8 +183,42 @@ class GloomObject:
         try:
             return self.references / self.global_references 
         except ZeroDivisionError:
-            return float('inf')
+            return 0
     
 
     def free(self):
-        del self.objects[self.location]
+        self.objects.pop(self.location, None)
+
+
+    def free_all(self):
+        """ Note we iterate over keys() explicitly here since Python dictionaries cannot be modified
+            while being iterated over without encountering a runtime exception
+        """
+        keys = list(self.objects.keys())
+        for key in keys:
+            self.objects.pop(key, None)
+            
+
+
+    @property
+    def objects_count(self):
+        return len(self.objects)
+
+
+class GloomMessage(GloomObject):
+
+    def __init__(self, affinity, selector, arguments):
+        super().__init__(None, affinity=GloomAffinity.NOTHING)
+        self.selector = selector
+        self.arguments = arguments
+        self.created_at = datetime.now()
+        self.sent_at = None
+        self.last_read = None
+
+
+    def send(self, recipient):
+        assert isinstance(recipient, GloomObject)
+        self.recipient.inbox.append(
+            self
+        )
+        

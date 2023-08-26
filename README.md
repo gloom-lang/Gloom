@@ -7,3 +7,7 @@ Gloom's philosophy hinges on the belief that programming, much like life itself,
 # Status
 
 This is in early stages. Currently this repository is more of a playground to work out the language's semantics
+
+# Disclaimer
+
+This is all intended to be silly -- Gloom is an artlang and learning project. Please use whatever guardrails make sense for your use-case! Guardrails like types and memory safety are nice because people make mistakes :)
