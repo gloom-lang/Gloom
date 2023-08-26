@@ -6,4 +6,4 @@ Gloom's philosophy hinges on the belief that programming, much like life itself,
 
 # Status
 
-This is in early stages. This repository is more of a playground to experiment with the language's semantics before going all-in on implementation.
+This is in early stages. Currently this repository is more of a playground to work out the language's semantics
