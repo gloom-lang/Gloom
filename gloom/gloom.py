@@ -155,7 +155,7 @@ class GloomObject:
     def __repr__(self):
         return f"""
         gloom object @ {self.location}: {self.value}
-            - popularity: {self.popularity_score} (across {self.objects_count} total objects)
+            - popularity: {self.popularity_score} (across {self.object_count()} total objects)
             - references: {self.references} (out of {self.global_references} total references globally)
             - created at: {self.created_at}
             - last referenced: {self.last_referenced}
@@ -200,9 +200,9 @@ class GloomObject:
             
 
 
-    @property
-    def objects_count(self):
-        return len(self.objects)
+    @classmethod
+    def object_count(cls):
+        return len(cls.objects)
 
 
 class GloomMessage(GloomObject):

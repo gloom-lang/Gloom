@@ -16,8 +16,16 @@ def test_initializing_two_objects_at_same_location_overwrites_the_first():
     o = GloomObject(location=location)
     o2 = GloomObject(location=location)
     assert o is o2
-    assert len(GloomObject.objects) == 1
+    assert GloomObject.object_count() == 1
     o.free_all()
+    assert not GloomObject.object_count()
+
+    for _ in range(25):
+        o = GloomObject()
+    assert GloomObject.object_count() == 1
+
+    o.free_all()
+    assert not GloomObject.object_count()
 
 
 def test_initializing_two_objects_at_different_locations_does_the_right_thing():
@@ -26,8 +34,16 @@ def test_initializing_two_objects_at_different_locations_does_the_right_thing():
     second_location = GloomPointer(1)
     o2 = GloomObject(location=second_location)
     assert o is not o2
-    assert len(GloomObject.objects) == 2
+    assert GloomObject.object_count() == 2
     o.free_all()
+
+    for i in range(25):
+        location = GloomPointer(i)
+        o = GloomObject(location=location)
+    assert GloomObject.object_count() == 25
+
+    o.free_all()
+    assert not GloomObject.object_count()
 
 
 def test_referencing_an_object_changes_its_refcount():
@@ -58,11 +74,12 @@ def test_move_to_new_location_does_the_right_thing():
 def test_free_does_the_right_thing():
     location1 = GloomPointer(1)
     o = GloomObject(location=location1)
-    assert len(GloomObject.objects) == 1
+    assert GloomObject.object_count() == 1
     location2 = GloomPointer(2)
     o2 = GloomObject(location=location2)
-    assert len(GloomObject.objects) == 2
+    assert GloomObject.object_count() == 2
     o.free()
-    assert len(GloomObject.objects) == 1
+    assert GloomObject.object_count() == 1
     o2.free()
-    assert not len(GloomObject.objects)
+    assert not GloomObject.object_count()
+
