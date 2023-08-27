@@ -1,10 +1,10 @@
-import copy
-
 from datetime import datetime
 from enum import Enum
 
-
 from types import MethodType as register_method
+from typing import Callable
+
+from gloom.hub import GloomHub
 
 def refmany(to_reference):
     to_reference = list(to_reference)
@@ -15,90 +15,6 @@ def refmany(to_reference):
 
 def refall():
     refmany(GloomObject.objects.objects)
-
-
-def ref(func):
-    def wrapper(*args, **kwargs):
-        assert len(args) > 0
-        maybe_object = args[0]
-        assert isinstance(maybe_object, GloomObject)
-        maybe_object.references += 1
-        maybe_object.last_referenced = datetime.now()
-        return func(*args, **kwargs)
-    return wrapper
-
-
-class GloomAffinity(Enum):
-
-    NOTHING = "nothing"
-    EVERYTHING = "everything"
-    REFERENCE = "reference"
-
-
-    def __repr__(self):
-        return f"({self.value})"
-
-
-class GloomValue:
-
-    def __init__(self, value=None, affinity=GloomAffinity.NOTHING):
-        assert affinity is not None
-        self.value = value
-        self.affinity = affinity
-
-    def __repr__(self):
-        return f"{self.value or '(nothing)'} (affinity: {self.affinity.value})"
-    
-
-    def __hash__(self):
-        return hash((self.value, self.affinity))
-
-
-    def __eq__(self, other):
-        if isinstance(other, GloomValue):
-            return self.value == other.value
-        return self.value == other
-
-
-    def is_nothing(self):
-        return self.affinity == GloomAffinity.NOTHING
-    
-
-    def is_everything(self):
-        return self.affinity == GloomAffinity.EVERYTHING
-    
-
-    def is_reference(self):
-        return self.affinity == GloomAffinity.REFERENCE
-    
-
-class GloomNothing(GloomValue):
-
-    def __init__(self, value=None):
-        super().__init__(None, affinity=GloomAffinity.NOTHING)
-        self.value = value
-    
-
-class GloomPointer(GloomValue):
-
-    def __init__(self, value):
-        super().__init__(value, affinity=GloomAffinity.REFERENCE)
-
-
-    def dereference(self):
-        derefed = GloomObject.objects.get(self)
-        if derefed is None:
-            return GloomObject()
-        
-
-    def __repr__(self):
-        return f"(##{self.value})"
-
-
-@ref
-def default_receiver(self, sender, method_name, *args, **kwargs):
-    identity = lambda *args, **kwargs: args, kwargs
-    return identity(*args, **kwargs)
 
 
 
@@ -179,6 +95,117 @@ class GloomHub:
         return representation
 
 
+
+def ref(func):
+    def wrapper(*args, **kwargs):
+        assert len(args) > 0
+        maybe_object = args[0]
+        assert isinstance(maybe_object, GloomObject)
+        maybe_object.references += 1
+        maybe_object.last_referenced = datetime.now()
+        return func(*args, **kwargs)
+    return wrapper
+
+
+class GloomAffinity(Enum):
+
+    NOTHING = "nothing"
+    EVERYTHING = "everything"
+    SOMETHING = "something"
+    REFERENCE = "reference"
+
+
+    def __repr__(self):
+        return self.value
+
+
+    def __str__(self):
+        return f"({self.value})"
+
+
+class GloomValue:
+
+    def __init__(self, value=None, affinity=GloomAffinity.NOTHING):
+        assert affinity is not None
+        self.value = value
+        self.affinity = affinity
+
+    def __repr__(self):
+        value = self.value
+        affinity = self.affinity
+        return f"{type(self).__name__}({value=}, {affinity=})"
+    
+
+    def __str__(self):
+        return f"{self.value or '(nothing)'} (affinity: {self.affinity.value})"
+    
+
+    def __hash__(self):
+        return hash((self.value, self.affinity))
+
+
+    def __eq__(self, other):
+        if isinstance(other, GloomValue):
+            return self.value == other.value
+        return self.value == other
+
+
+    def is_nothing(self):
+        return self.affinity == GloomAffinity.NOTHING
+    
+
+    def is_everything(self):
+        return self.affinity == GloomAffinity.EVERYTHING
+    
+
+    def is_reference(self):
+        return self.affinity == GloomAffinity.REFERENCE
+    
+
+class GloomEverything(GloomValue):
+
+    def __init__(self, value):
+        super().__init__(value, affinity=GloomAffinity.EVERYTHING)
+
+
+class GloomSomething(GloomValue):
+    def __init__(self, value):
+        super().__init__(value, affinity=GloomAffinity.SOMETHING)
+    
+
+class GloomNothing(GloomValue):
+
+    def __init__(self, value=None):
+        super().__init__(None, affinity=GloomAffinity.NOTHING)
+        self.value = value
+    
+
+class GloomPointer(GloomValue):
+
+    def __init__(self, value):
+        super().__init__(value, affinity=GloomAffinity.REFERENCE)
+
+
+    def dereference(self):
+        derefed = GloomObject.objects.get(self)
+        if derefed is None:
+            return GloomObject()
+        return derefed
+        
+
+    def __repr__(self):
+        return f"(#{self.value})"
+
+
+
+def default_receiver(self, sender, method_name, *args, **kwargs):
+    identity = lambda *args, **kwargs: args, kwargs
+    return identity(*args, **kwargs)
+
+
+
+
+
 class GloomObject:
 
     objects = GloomHub()
@@ -195,10 +222,13 @@ class GloomObject:
         return super(GloomObject, cls).__new__(cls)
 
 
-    def __init__(self, value=GloomNothing(), receiver=default_receiver, location=GloomPointer(0)):
+    def __init__(self, name=None, value=GloomNothing(), receiver=default_receiver, selector="anonymous", location=GloomPointer(0)):
+        self.name = name or "anonymous"
         self.references = 0
         self.created_at = datetime.now()
-        self.methods = {}
+        self.methods = {
+            "print": self.print
+        }
         self.receiver = receiver
         self.value = value
         self.updated_at = datetime.now()
@@ -207,13 +237,65 @@ class GloomObject:
         self.objects.store(self._location, self)
         self.inbox = []
         self.outbox = []
+        self.archive = []
+        self.stack = []
+        self.selector = selector
 
+
+    def send(self, selector, message=None):
+        if message is None:
+            message = self
+        assert (
+            isinstance(message, GloomObject)
+        )
+        message.outbox.append(
+            (selector, message)
+        )
+        self.inbox.append(
+            (selector, message)
+        )
+
+
+    def receive(self):
+
+        if not self.inbox:
+            return
+
+        selector, message = self.inbox.pop()
+
+        if message.value.is_nothing():
+            self.become_nothing()
+
+        if self.value.is_nothing():
+            return
+
+        if (h := self.methods.get(selector)) is not None:
+            self.stack.append(
+                h(message)
+            )
+        else:
+            self.environment[message.location] = message
+
+
+    def print(self, message):
+        return GloomObject(print(message.value.value))
+
+
+    def become_everything(self):
+        self.valaue.affinity = GloomAffinity.EVERYTHING
+
+
+    def become_something(self):
+        self.value.affinity = GloomAffinity.SOMETHING
+
+
+    def become_nothing(self):
+        self.value.affinity = GloomAffinity.NOTHING
 
 
     @property
     def location(self):
         return self._location
-    
 
 
     @location.setter
@@ -261,8 +343,9 @@ class GloomObject:
     def __repr__(self):
         value = self.value
         receiver = default_receiver.__name__
+        name = self.name
         location = self.location
-        return f"GloomObject({value=}, {receiver=}, {location=})"
+        return f"GloomObject({name=}, {value=}, {receiver=}, {location=})"
     
 
     @ref
@@ -311,22 +394,3 @@ class GloomObject:
     @classmethod
     def object_count(cls):
         return len(cls.objects)
-
-
-class GloomMessage(GloomObject):
-
-    def __init__(self, affinity, selector, arguments):
-        super().__init__(None, affinity=GloomAffinity.NOTHING)
-        self.selector = selector
-        self.arguments = arguments
-        self.created_at = datetime.now()
-        self.sent_at = None
-        self.last_read = None
-
-
-    def send(self, sender, recipient):
-        assert isinstance(recipient, GloomObject)
-        self.recipient.inbox.append(
-            self
-        )
-        
