@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import datetime
 from enum import Enum
 
@@ -5,6 +6,11 @@ from types import MethodType as register_method
 from typing import Callable
 
 from gloom.hub import GloomHub
+
+from sys import maxsize as MAXINT
+from sys import float_info
+
+MAXFLOAT = float_info.max
 
 def refmany(to_reference):
     to_reference = list(to_reference)
@@ -19,6 +25,13 @@ def refall():
 
 
 class GloomHub:
+    """ This is a funny abstraction that we're using to represent virtual memory
+        For right now, to keep things dead simple while we work out the core semantics,
+        this is a key-value pair mapping memory locations to objects that can receive messages
+        Eventually this will be a bytearray or similar, which will require more tedious pointer
+        arithmetic to work with, and also closely resemble the on-disk format to be used for
+        images
+    """
 
     def __init__(self):
         self.objects = {}
@@ -164,8 +177,8 @@ class GloomValue:
 
 class GloomEverything(GloomValue):
 
-    def __init__(self, value):
-        super().__init__(value, affinity=GloomAffinity.EVERYTHING)
+    def __init__(self):
+        super().__init__("*", affinity=GloomAffinity.EVERYTHING)
 
 
 class GloomSomething(GloomValue):
@@ -191,6 +204,120 @@ class GloomPointer(GloomValue):
         if derefed is None:
             return GloomObject()
         return derefed
+    
+
+    def outcome_affinity(self, left, right):
+        """
+        In Gloom, the affinities determine (roughly) what type is returned by
+        a binary operation. The outcome of all operations is modeled by this table:
+                 
+                    EVERYTHING  SOMETHING   NOTHING    REFERENCE   
+        EVERYTHING  EVERYTHING  SOMETHING   NOTHING    REFERENCE
+        SOMETHING   SOMETHING   SOMETHING   NOTHING    REFERENCE   
+        NOTHING     NOTHING     NOTHING     NOTHING    NOTHING
+        REFERENCE   REFERENCE   REFERENCE   NOTHING    REFERENCE
+
+        e.g. NOTHING (+) (any other type) = NOTHING
+        where (+) is an abstract operation, whereas
+             EVERYTHING (+) A = A
+        where A is any other affinity except for EVERYTHING.
+        """
+        match (left, right):
+            case _ if left == right:
+                return left
+            case (GloomAffinity.NOTHING, _) | (_, GloomAffinity.NOTHING):
+                return GloomAffinity.NOTHING
+            case (GloomAffinity.EVERYTHING, T) | (T, GloomAffinity.EVERYTHING):
+                return T
+            case (GloomAffinity.SOMETHING, GloomAffinity.REFERENCE) | (GloomAffinity.REFERENCE, GloomAffinity.SOMETHING):
+                return GloomAffinity.REFERENCE
+            case _:
+                raise ValueError(
+                    "Received a weird type combination "
+                    "when trying to figure out the outcome "
+                    f"affinity: ({left}, {right})\n"
+                    "Gloom operations support any pairs of the following valid affinities:\n"
+                    "{"
+                    ""
+                )
+            
+
+    def type_converters_something(self, datatype):
+        return {
+            str: str,
+            dict: lambda v: {v.value: v.value},
+            int: int,
+            float: float,
+            bool: bool,
+            type(None): lambda v: None
+        }[datatype]
+    
+
+    def type_converters_everything(self, datatype):
+        all_unicode = lambda _: ''.join(chr(i) for i in range(0x10FFFF))
+        return {
+            str: all_unicode,
+            dict: lambda _: {k:v for k, v in zip(all_unicode(), range(0x10FFFF))},
+            int: lambda _: MAXINT,
+            float: lambda _: MAXFLOAT,
+            bool: lambda _: MAXINT,
+            type(None): lambda _: 0
+        }[datatype]
+    
+
+    def bottom_value_datatype(self, datatype):
+        if datatype in (int, float, bool):
+            return 0
+        elif datatype == str:
+            return ""
+        elif datatype == dict:
+            return {}
+        elif datatype is type(None):
+            return None
+
+
+    def type_converters_nothing(self, datatype):
+        return lambda _: None
+
+
+    def try_convert(self, value, datatype, target_affinity):
+        value.affinity = target_affinity
+        type_converter = {
+            GloomAffinity.EVERYTHING: self.type_converters_everything,
+            GloomAffinity.SOMETHING: self.type_converters_something,
+            GloomAffinity.REFERENCE: self.type_converters_something,
+            GloomAffinity.NOTHING: self.type_converters_nothing
+        }[target_affinity](datatype)
+        try:
+            value.value = type_converter(value)
+        except TypeError:
+            value.value = self.bottom_value_datatype(datatype)
+
+            
+
+    def fix_affinities(self, other):
+        """ 
+        
+        1:nothing + 'hi':T
+        outcome: nothing wins, so + does nothing. poison 'hi' and return GloomNothing()
+
+        1:everything + 'hi':something
+        outcome: something wins
+        convert 1 to string
+        if we can't, then turn 1 into emptystring
+        set its value to something
+        """
+        pass
+
+
+
+    def __add__(self, other):
+        affinity = self.outcome_affinity(self.affinity, other.affinity)
+
+        
+
+
+
         
 
     def __repr__(self):
@@ -222,13 +349,12 @@ class GloomObject:
         return super(GloomObject, cls).__new__(cls)
 
 
-    def __init__(self, name=None, value=GloomNothing(), receiver=default_receiver, selector="anonymous", location=GloomPointer(0)):
+    def __init__(self, name=None, value=GloomNothing(), methods=None, receiver=default_receiver, selector="anonymous", location=GloomPointer(0)):
         self.name = name or "anonymous"
         self.references = 0
         self.created_at = datetime.now()
-        self.methods = {
-            "print": self.print
-        }
+        self.methods = methods or {}
+        self.objects = GloomHub()
         self.receiver = receiver
         self.value = value
         self.updated_at = datetime.now()
@@ -237,44 +363,59 @@ class GloomObject:
         self.objects.store(self._location, self)
         self.inbox = []
         self.outbox = []
-        self.archive = []
         self.stack = []
         self.selector = selector
+        self.listening = False
 
 
-    def send(self, selector, message=None):
-        if message is None:
-            message = self
-        assert (
-            isinstance(message, GloomObject)
+    def listen(self):
+        self.listening = True
+
+
+    def handle_unary_message(self, selector):
+        if (m := self.methods.get(selector)) is not None:
+            return m(self)
+
+    
+    def handle_keyword_message(self, message):
+        selector = ":".join(message.keys())
+        print(selector)
+        if (m := self.methods.get(selector)) is not None:
+            return m(self, **message)
+
+
+    def handle_binary_message(self, message):
+        selector, value = message
+        return self.handle_keyword_message(
+            {selector: selector, "to": value}
         )
-        message.outbox.append(
-            (selector, message)
-        )
+
+
+    def send(self, message):
         self.inbox.append(
-            (selector, message)
+            message
         )
+
+        if self.listening:
+            return self.receive()
 
 
     def receive(self):
 
         if not self.inbox:
             return
+        
+        message = self.inbox.pop()
 
-        selector, message = self.inbox.pop()
-
-        if message.value.is_nothing():
-            self.become_nothing()
-
-        if self.value.is_nothing():
-            return
-
-        if (h := self.methods.get(selector)) is not None:
-            self.stack.append(
-                h(message)
-            )
+        if isinstance(message, str):
+            return self.handle_unary_message(message)
+        elif isinstance(message, dict):
+            return self.handle_keyword_message(message)
+        elif isinstance(message, tuple) and len(message) == 2:
+            return self.handle_binary_message(message)
         else:
-            self.environment[message.location] = message
+            return GloomNothing().pointer
+
 
 
     def print(self, message):
@@ -372,25 +513,22 @@ class GloomObject:
         self.free_location(self.location)
 
 
-    def free_location(cls, location):
-        cls.objects.pop(location, None)
+    def free_location(self, location):
+        self.objects.pop(location, None)
 
 
-    @classmethod
-    def store(cls, key, value):
-        cls.objects[key] = value
+    def store(self, key, value):
+        self.objects[key] = value
 
 
-    @classmethod
-    def free_all(cls):
+    def free_all(self):
         """ Note we iterate over keys() explicitly here since Python dictionaries cannot be modified
             while being iterated over without encountering a runtime exception
         """
-        keys = list(cls.objects.keys())
+        keys = list(self.objects.keys())
         for key in keys:
-            cls.objects.pop(key, None)
+            self.objects.pop(key, None)
             
 
-    @classmethod
-    def object_count(cls):
-        return len(cls.objects)
+    def object_count(self):
+        return len(self.objects)
