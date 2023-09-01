@@ -6,7 +6,26 @@ Gloom's philosophy hinges on the belief that programming, much like life itself,
 
 # Status
 
-This is in early stages. Currently this repository is more of a playground to work out the language's semantics
+This is in early stages. Currently this repository is more of a playground to work out the language's semantics, so nothing here really works at the moment.
+
+# Grammar (tentative)
+
+```ebnf
+    program = { statement }
+    statement = message_send "."
+    message_send = receiver { argument } 
+    receiver = "(" message_send ")" | value
+    argument = named_parameter | binary_parameter | unary_parameter
+    unary_parameter = ":" name
+    named_parameter = ":" parameter_name value
+    binary_parameter = operator value
+    operator = "+" | "-" | "," | "*" | "/" | "%"
+    value = literal | name | "(" message_send ")"
+    literal = number | string | boolean | array
+    array = "(" { literal }")"
+    name = letter { letter | digit }
+```
+
 
 # Disclaimer
 
