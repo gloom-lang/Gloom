@@ -26,7 +26,6 @@ This is in early stages. Currently this repository is more of a playground to wo
     name = letter { letter | digit }
 ```
 
-
 # Disclaimer
 
-This is all intended to be silly -- Gloom is an artlang and learning project. Please use whatever guardrails make sense for your use-case! Guardrails like types and memory safety are nice because people make mistakes :)
+This is all intended to be silly -- Gloom is an artlang and learning project. Please use whatever guardrails make sense for your use-case. Guardrails like types and memory safety are nice because people make mistakes. Please be nice to each other 

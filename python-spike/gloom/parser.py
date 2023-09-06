@@ -278,14 +278,14 @@ class Lexer:
         return self.tokens
     
 
+
 class EverythingNode:
 
     def __init__(self):
         pass
 
 
-
-class MessageSend:
+class MessageSendNode:
 
     def __init__(self, receiver, arguments):
         self.receiver = receiver
@@ -293,14 +293,28 @@ class MessageSend:
 
 
     def __repr__(self):
-        return f"""MessageSend(
+        return f"""MessageSendNode(
             receiver={self.receiver}, 
             arguments={self.arguments}
         )
                     """
     
 
-class MessageArgument:
+    def evaluate(self, environment):
+        if isinstance(self.receiver, MessageSendNode):
+            self.receiver = self.receiver.evaluate(environment)
+
+        message_payload = {}
+        for argument in self.arguments:
+            message_payload[argument.selector] = argument.evaluate(environment)
+
+        value = self.receiver.send(message_payload, environment)
+        return value
+
+
+    
+
+class MessageArgumentNode:
 
     def __init__(self, selector, value):
         self.selector = selector
@@ -309,13 +323,42 @@ class MessageArgument:
 
     def __repr__(self):
         return f"""Argument({self.selector}, {self.value})"""
+    
+
+    def evaluate(self, environment):
+        if isinstance(self.value, MessageSendNode):
+            self.value.evaluate(environment)
+        if isinstance(self.value, list):
+            return []
+        return self.value.evaluate(environment)
+        
 
 
-class GloomObject:
+
+class ObjectNode:
 
     def __init__(self, value, kind):
         self.value = value
         self.kind = kind
+        self.properties = {}
+
+
+    def evaluate(self, environment):
+        return self if self.kind != 'object' else self.properties.get(self.value, 0)
+
+
+    def send(self, payload, environment):
+        if payload.get('print'):
+            print(self.value)
+        elif (m := payload.get("+")):
+            self.value += m.value
+        elif (m := payload.get("*")):
+            self.value *= m.value
+        elif (varname := payload.get("set")):
+            value = payload.get("to")
+            self.properties[varname] = value
+ 
+        return self
 
 
     def __repr__(self):
@@ -324,12 +367,20 @@ class GloomObject:
 
 class Parser:
 
-    def __init__(self, tokens):
+    def __init__(self, tokens=None):
+        if tokens is None:
+            tokens = []
         self.tokens = tokens
         self.ast = None
         self.position = 0
         self.target = None
         self.buffer = []
+
+
+    def parse(self, program_string):
+        lexer = Lexer()
+        self.tokens = lexer.lex(program_string)
+        return self.parse_program()
 
 
     def eof(self):
@@ -431,7 +482,7 @@ class Parser:
 
 
     def parse_message_send(self):
-        return MessageSend(
+        return MessageSendNode(
             self.parse_receiver(), 
             self.parse_arguments()
         )
@@ -448,7 +499,7 @@ class Parser:
 
 
     def parse_unary_argument(self):
-        value = MessageArgument(
+        value = MessageArgumentNode(
             self.current_tokenvalue,
             []
         )
@@ -457,7 +508,7 @@ class Parser:
 
 
     def parse_named_argument(self):
-        value = MessageArgument(
+        value = MessageArgumentNode(
             self.current_tokenvalue,
             self.parse_value()
         )
@@ -482,7 +533,7 @@ class Parser:
     
 
     def parse_binary_argument(self):
-        return MessageArgument(
+        return MessageArgumentNode(
             self.parse_operator(),
             self.parse_value()
         )
@@ -510,7 +561,7 @@ class Parser:
         
 
     def parse_number(self):
-        value = GloomObject(
+        value = ObjectNode(
             float(self.current_tokenvalue),
             "number"
         )
@@ -519,7 +570,7 @@ class Parser:
     
 
     def parse_string(self):
-        value = GloomObject(
+        value = ObjectNode(
              self.current_tokenvalue,
             "string"
         )
@@ -530,7 +581,7 @@ class Parser:
     def parse_array(self):
         self.consume(Token.HASH)
         self.consume(Token.LPAREN)
-        value = GloomObject(
+        value = ObjectNode(
             [],
             "array"
         )
@@ -543,7 +594,7 @@ class Parser:
 
     
     def parse_boolean(self):
-        value = GloomObject(
+        value = ObjectNode(
             self.current_tokenvalue == "true",
             "boolean"
         )
@@ -552,7 +603,7 @@ class Parser:
     
 
     def parse_object(self):
-        value = GloomObject(
+        value = ObjectNode(
             self.current_tokenvalue,
             "object"
         )
@@ -587,6 +638,7 @@ class Parser:
                 raise Exception(
                     f"hmmm i was expecting something nicer like a number | string | hash | boolean | object but got {self.current_token} instead ;//"
                 )
+        
     
 
 
