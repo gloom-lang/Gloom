@@ -1,5 +1,5 @@
 pub type GloomType {
-  GloomNumber
-  GloomString
-  GloomTable
+  Number
+  String
+  Table
 }

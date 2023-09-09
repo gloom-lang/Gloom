@@ -1,5 +1,4 @@
-import dtype.{GloomNumber, GloomString, GloomTable}
-import object.{Everything, GloomAffinity, Nothing, Something}
+import affinity.{Everything, GloomAffinity, Nothing, Something}
 import object.{GloomObject}
 import gleam/map
 import gleam/list
@@ -7,7 +6,7 @@ import gleam/list
 pub type GloomMessage {
   UnaryMessage(selector: String)
   BinaryMessage(selector: String, argument: GloomObject)
-  NamedMessage(arguments: GloomTable)
+  NamedMessage(arguments: GloomObject)
   Noop
 }
 
@@ -17,7 +16,6 @@ pub type MessageSend {
 
 pub type MessageHandler =
   fn(GloomObject, GloomMessage) -> GloomObject
-
 // every computation with an everything object is inplace
 // something objects can be modified, but only explicitly
 // nothing objects are no-op. they are the only truly safe objects. 
@@ -38,16 +36,6 @@ pub type MessageHandler =
 // x :become Nothing.
 // :set x :to x + 5. // x is still 5
 // x :print. // nothing happens
-pub fn affinity_max(left: GloomAffinity, right: GloomAffinity) {
-  case left, right {
-    Nothing, _ -> left
-    _, Nothing -> right
-    Everything, Everything -> left
-    Everything, Something -> left
-    Something, Everything -> right
-    Something, Something -> left
-  }
-}
 
 //pub fn set_affinities(new_affinity: GloomAffinity, message_send: MessageSend) {
 //  let MessageSend(recipient, message) = message_send
@@ -75,7 +63,3 @@ pub fn affinity_max(left: GloomAffinity, right: GloomAffinity) {
 //   NamedMessage(arguments)
 //  }
 //}
-
-pub fn raw_send(message_send: MessageSend) {
-  todo
-}

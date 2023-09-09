@@ -6,10 +6,12 @@ import gleam/float
 import gleam/list
 import gleam/string_builder
 import template.{template_replace_all}
+import affinity.{Everything, GloomAffinity, Nothing, Something}
 import gleam_value.{
-  FloatValue, GleamValue, IntValue, MapValue, StringValue, length, new_map,
+  FloatValue, GleamValue, IntValue, MapValue, StringValue, empty_map, ensure_map,
+  insert, length,
 }
-import dtype.{GloomNumber, GloomString, GloomTable, GloomType}
+import dtype.{GloomType, Number, String, Table}
 
 pub type GloomObject {
   GloomObject(
@@ -21,10 +23,8 @@ pub type GloomObject {
   )
 }
 
-pub type GloomAffinity {
-  Nothing
-  Everything
-  Something
+pub opaque type GloomTable {
+  GloomTable(map.Map(GloomObject, GloomObject))
 }
 
 fn gloom_table_list_repr(table: map.Map(GleamValue, GleamValue)) {
@@ -35,7 +35,6 @@ fn gloom_table_list_repr(table: map.Map(GleamValue, GleamValue)) {
     |> string_builder.append(value_repr(value))
     |> string_builder.append("\n")
   }
-
   table
   |> map.to_list
   |> list.map(key_value_repr)
@@ -54,9 +53,9 @@ fn value_repr(gloom_value: GleamValue) {
 
 fn datatype_repr(datatype: GloomType) {
   case datatype {
-    GloomNumber -> "number"
-    GloomString -> "string"
-    GloomTable -> "table"
+    Number -> "number"
+    String -> "string"
+    Table -> "table"
   }
 }
 
@@ -70,14 +69,14 @@ fn affinity_repr(affinity: GloomAffinity) {
 
 pub fn object_repr(object: GloomObject) {
   case object.datatype {
-    GloomTable -> {
-      let len = length(object.value)
+    Table -> {
+      let len = length(object.properties)
       let header_template =
         "\n({affinity} {datatype} containing {length} elements):\n \n {value}"
       template_replace_all(
         header_template,
         map.from_list([
-          #("value", value_repr(object.value)),
+          #("value", value_repr(object.properties)),
           #("datatype", datatype_repr(object.datatype)),
           #("affinity", affinity_repr(object.affinity)),
           #("length", int.to_string(len)),
@@ -89,7 +88,7 @@ pub fn object_repr(object: GloomObject) {
       template_replace_all(
         header_template,
         map.from_list([
-          #("value", value_repr(object.value)),
+          #("value", value_repr(object.properties)),
           #("datatype", datatype_repr(object.datatype)),
           #("affinity", affinity_repr(object.affinity)),
         ]),
@@ -98,30 +97,38 @@ pub fn object_repr(object: GloomObject) {
   }
 }
 
-pub fn print_object(object: GloomObject) {
+pub fn print(object: GloomObject) {
   object
   |> object_repr
   |> io.println
 }
 
-pub fn nothing() -> GloomObject {
+pub fn nothing(datatype: GloomType) -> GloomObject {
   GloomObject(
-    value: IntValue(value: 0),
-    datatype: GloomNumber,
+    datatype: datatype,
     affinity: Nothing,
-    properties: new_map(),
-    selectors: new_map(),
-    handlers: new_map(),
+    properties: empty_map(),
+    selectors: empty_map(),
+    handlers: empty_map(),
   )
 }
 
-pub fn everything() -> GloomObject {
+pub fn something(datatype: GloomType) -> GloomObject {
   GloomObject(
-    value: IntValue(value: 1),
-    datatype: GloomNumber,
+    datatype: datatype,
+    affinity: Something,
+    properties: empty_map(),
+    selectors: empty_map(),
+    handlers: empty_map(),
+  )
+}
+
+pub fn everything(datatype: GloomType) -> GloomObject {
+  GloomObject(
+    datatype: datatype,
     affinity: Everything,
-    properties: new_map(),
-    selectors: new_map(),
-    handlers: new_map(),
+    properties: empty_map(),
+    selectors: empty_map(),
+    handlers: empty_map(),
   )
 }
