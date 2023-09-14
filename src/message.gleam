@@ -1,7 +1,4 @@
-import affinity.{Everything, GloomAffinity, Nothing, Something}
-import object.{GloomObject}
-import gleam/map
-import gleam/list
+import gleam_value.{GloomObject}
 
 pub type GloomMessage {
   UnaryMessage(selector: String)

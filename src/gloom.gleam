@@ -1,4 +1,5 @@
-import object.{print, something}
+import gleam_value.{something}
+import repr.{print}
 import dtype.{Number}
 
 pub fn main() {
