@@ -4,7 +4,7 @@ pub type GloomAffinity {
   Something
 }
 
-pub fn affinity_max(left: GloomAffinity, right: GloomAffinity) {
+pub fn affinity_max(left: GloomAffinity, right: GloomAffinity) -> GloomAffinity {
   case left, right {
     Nothing, _ -> left
     _, Nothing -> right

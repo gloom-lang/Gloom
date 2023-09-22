@@ -40,6 +40,14 @@ pub fn from_string(string: String) {
   StringValue(string)
 }
 
+pub fn from_float(float: Float) {
+  FloatValue(float)
+}
+
+pub fn from_int(int: Int) {
+  IntValue(int)
+}
+
 pub fn empty_value(datatype: GloomType) {
   case datatype {
     Number -> empty_number()
@@ -107,7 +115,11 @@ pub fn ensure_object_value(value: GleamValue) -> GleamValue {
       value
       |> gloom_type
       |> something
-      |> set_property(from_string("value"), value)
+      |> set_property(
+        "value"
+        |> from_string,
+        value,
+      )
       |> ObjectValue
   }
 }
