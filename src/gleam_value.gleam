@@ -11,8 +11,6 @@ pub type GloomObject {
     datatype: GloomType,
     affinity: GloomAffinity,
     properties: GleamValue,
-    selectors: GleamValue,
-    handlers: GleamValue,
   )
 }
 
@@ -22,6 +20,10 @@ pub type GleamValue {
   StringValue(value: String)
   MapValue(value: map.Map(GleamValue, GleamValue))
   ObjectValue(value: GloomObject)
+}
+
+pub fn from_list(list: List(#(GleamValue, GleamValue))) -> GleamValue {
+  MapValue(map.from_list(list))
 }
 
 pub fn empty_number() {
@@ -97,7 +99,7 @@ pub fn ensure_map_value(value: GleamValue) -> GleamValue {
       // Perfectly sensible behavior here is to turn the non-map
       // gleam value into a map with the gleam value
       // as value, and the key is something that exudes
-      // emptiness. That makes everyone is happy
+      // emptiness. That makes everyone happy
       let empty_gloom_value =
         value
         |> gloom_type
@@ -136,7 +138,7 @@ pub fn insert(
       MapValue(map.insert(gleam_map, key, value))
     }
     // Sad case. It's not a map. But we live to please. So we 
-    // make it a map :) that way everyone is happy
+    // make it a map :) that way everyone is happy :)
     _ ->
       ensure_map_value(maybe_map)
       |> insert(key, value)
@@ -175,8 +177,6 @@ pub fn nothing(datatype: GloomType) -> GloomObject {
     datatype: datatype,
     affinity: Nothing,
     properties: empty_map(),
-    selectors: empty_map(),
-    handlers: empty_map(),
   )
 }
 
@@ -186,8 +186,6 @@ pub fn something(datatype: GloomType) -> GloomObject {
     datatype: datatype,
     affinity: Something,
     properties: empty_map(),
-    selectors: empty_map(),
-    handlers: empty_map(),
   )
 }
 
@@ -197,7 +195,5 @@ pub fn everything(datatype: GloomType) -> GloomObject {
     datatype: datatype,
     affinity: Everything,
     properties: empty_map(),
-    selectors: empty_map(),
-    handlers: empty_map(),
   )
 }
